@@ -467,92 +467,86 @@
           var send = function(msg) {
             record.push(msg);
             bindMsgList();
-            if (msg.type == "text") {
-              toRobot(msg.content);
+            toRobot(msg.type, msg.content);
+          };
+
+          var toRobot = function(type, content) {
+            if (type == 'text') {
+              var apiUrl = 'http://148.70.180.93:10000/tchat';
+              $.post(apiUrl, {
+                "data": content,
+              }, function(response) {
+                //alert(JSON.stringify(response));
+                //alert(response.type);
+                if (response.type == 'text') {
+                  record.push({
+                    sender: 'zs',
+                    type: 'text',
+                    content: response.data
+                  });
+                  bindMsgList();
+                } else {
+                  dataURL2Audio(response, function(entry) {
+                    record.push({
+                      sender: 'zs',
+                      type: response.type,
+                      content: entry.fullPath
+                    });
+                    bindMsgList();
+                  });
+                }
+              }, 'json');
             } else {
-              toRobot3(msg.type, msg.content);
+              var wt = plus.nativeUI.showWaiting();
+              var task = plus.uploader.createUpload('http://148.70.180.93:10000/achat',
+                {method:"POST"},
+                function (t, status) { //上传完成
+                  if (status == 200){
+                    wt.close(); //关闭等待提示按钮
+                response = JSON.parse(t.responseText);
+                if (response.type == 'text') {
+                  record.push({
+                    sender: 'zs',
+                    type: 'text',
+                    content: response.data
+                  });
+                  bindMsgList();
+                } else {
+                  dataURL2Audio(response, function(entry) {
+                    record.push({
+                      sender: 'zs',
+                      type: response.type,
+                      content: entry.fullPath
+                    });
+                    bindMsgList();
+                  });
+                }
+                  } else {
+                    alert("上传失败："+status);
+                    wt.close();//关闭等待提示按钮
+                  }
+                }
+              );
+              task.addData("name", content);
+              task.addFile(content, {key:"data"});
+              task.start();
             }
           };
-          var toRobot = function(info) {
-            var apiUrl = 'http://148.70.180.93:10000/tchat';
-            $.post(apiUrl, {
-              "data": info,
-            }, function(data) {
-              //alert(JSON.stringify(data));
-              record.push({
-                sender: 'zs',
-                type: 'text',
-                content: data
-              });
-              bindMsgList();
-            }, 'json');
-          };
 
-          var toRobot2 = function(type, content) {
-            var wt = plus.nativeUI.showWaiting();
-            var task = plus.uploader.createUpload('http://148.70.180.93:10000/achat',
-              {method:"POST"},
-              function (t,status) { //上传完成
-                if (status == 200){
-                  wt.close(); //关闭等待提示按钮
-                  dataURL2Audio(t.responseText, function(entry) {
-                    record.push({
-                      sender: 'zs',
-                      type: 'sound',
-                      content: entry.fullPath
-                    });
-                    bindMsgList();
-                  });
-                } else {
-                  alert("上传失败："+status);
-                  wt.close();//关闭等待提示按钮
-                }
-              }
-            );  
-            //task.addData("name","test");
-            task.addFile(content, {key:"content"});
-            task.start();
-          };
-
-          var toRobot3 = function(type, content) {
-            var wt = plus.nativeUI.showWaiting();
-            var task = plus.uploader.createUpload('http://148.70.180.93:10000/hyperlpr',
-              {method:"POST"},
-              function (t,status) { //上传完成
-                if (status == 200){
-                  wt.close(); //关闭等待提示按钮
-                  dataURL2Image(t.responseText, function(entry) {
-                    record.push({
-                      sender: 'zs',
-                      type: 'image',
-                      content: entry.fullPath
-                    });
-                    bindMsgList();
-                  });
-                } else {
-                  alert("上传失败："+status);
-                  wt.close();//关闭等待提示按钮
-                }
-              }
-            );
-            //task.addData("name","test");
-            task.addFile(content, {key:"content"});
-            task.start();
-          };
-
-          var dataURL2Audio = function(base64Str, callback) {
-            var base64Str = base64Str.replace('data:audio/amr;base64,','');
-            var audioName = (new Date()).valueOf() + '.amr';
+          var dataURL2Audio = function(response, callback) {
+            //var base64Str = base64Str.replace('data:audio/amr;base64,','');
+            var data = response.data;
+            var name = (new Date()).valueOf() + response.name;
 
             plus.io.requestFileSystem(plus.io.PRIVATE_DOC, function(fs) {
-              fs.root.getFile(audioName, {create:true}, function(entry) {
+              fs.root.getFile(name, {create:true}, function(entry) {
                 var fullPath = entry.fullPath;
                 if (mui.os.android) {
                   var Base64 = plus.android.importClass("android.util.Base64");
                   var FileOutputStream = plus.android.importClass("java.io.FileOutputStream");
                   try {
                     var out = new FileOutputStream(fullPath);
-                    var bytes = Base64.decode(base64Str, Base64.DEFAULT);
+                    var bytes = Base64.decode(data, Base64.DEFAULT);
                     out.write(bytes);
                     out.close();
                     callback && callback(entry);
@@ -562,7 +556,7 @@
                 } else if(mui.os.ios) {
                   var NSData = plus.ios.importClass('NSData');
                   var nsData = new NSData();
-                  nsData = nsData.initWithBase64EncodedStringoptions(base64Str,0);
+                  nsData = nsData.initWithBase64EncodedStringoptions(data,0);
                   if (nsData) {
                     nsData.plusCallMethod({writeToFile: fullPath,atomically:true});
                     plus.ios.deleteObject(nsData);
@@ -571,39 +565,6 @@
                 }
               })
             })
-          };
-
-          var dataURL2Image = function(base64Str, callback) {  
-            var base64Str = base64Str.replace('data:image/jpg;base64,','');  
-            var audioName = (new Date()).valueOf() + '.jpg';  
-
-            plus.io.requestFileSystem(plus.io.PRIVATE_DOC, function(fs) { 
-              fs.root.getFile(audioName, {create:true}, function(entry) {  
-                var fullPath = entry.fullPath;  
-                if (mui.os.android) {
-                  var Base64 = plus.android.importClass("android.util.Base64");  
-                  var FileOutputStream = plus.android.importClass("java.io.FileOutputStream");  
-                  try {
-                    var out = new FileOutputStream(fullPath);  
-                    var bytes = Base64.decode(base64Str, Base64.DEFAULT);  
-                    out.write(bytes);   
-                    out.close();  
-                    callback && callback(entry);  
-                  } catch(e) {
-                    console.log(e.message);  
-                  }  
-                } else if(mui.os.ios) {
-                  var NSData = plus.ios.importClass('NSData');  
-                  var nsData = new NSData();  
-                  nsData = nsData.initWithBase64EncodedStringoptions(base64Str,0);  
-                  if (nsData) {  
-                    nsData.plusCallMethod({writeToFile: fullPath,atomically:true});  
-                    plus.ios.deleteObject(nsData);  
-                  }  
-                  callback && callback(entry);  
-                }  
-              })  
-            })  
           };
 
           function msgTextFocus() {
